@@ -56,7 +56,7 @@ render: |
   type: custom
   power:
     source: http
-    uri: https://api.tessie.com/{{ .vin }}/state{{`{{ if .enabled }}{{ else }}?use_cache=true{{ end }}`}}
+    uri: https://api.tessie.com/{{ .vin }}/state?use_cache=true
     headers:
       Authorization: Bearer {{ .token }}
     jq: |
@@ -95,7 +95,7 @@ render: |
 
   enabled:
     source: http
-    uri: https://api.tessie.com/{{ .vin }}/state{{`{{ if .enable }}{{ else }}?use_cache=true{{ end }}`}}
+    uri: https://api.tessie.com/{{ .vin }}/state?use_cache=true
     headers:
       Authorization: Bearer {{ .token }}
     jq: |
