@@ -22,6 +22,7 @@ params:
 render: |
   type: custom
   {{- include "vehicle-common" . }}
+  features: ["streaming"]
   soc: # battery state of charge (%)
     source: http
     uri: https://api.tessie.com/{{ .vin }}/state?use_cache=true
