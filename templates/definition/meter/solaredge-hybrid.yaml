@@ -474,8 +474,6 @@ render: |
               limit := {{ .maxdischargepower }}
               out := rated
               if limit < out { out = limit }
-              acLimit := {{ .maxacpower }}
-              if acLimit < out { out = acLimit }
               out
       - case: 5 # discharge
         set:
