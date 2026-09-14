@@ -201,6 +201,14 @@ func currentSlotSuggestion(detail batteryDetail, res optimizer.BatteryResult, sl
 		case idle && gridExporting:
 			// idle while exporting: surplus is exported instead of charged
 			s.Action = api.BatteryHoldCharge.String()
+		case idle:
+			// idle with no net grid flow: the site is self-balanced (e.g. another
+			// battery is covering the surplus/load), so there's no import/export signal
+			// to read intent from. Hold rather than release to self-consumption - with a
+			// single battery that's a no-op, but with several, self-consumption on a
+			// battery the plan wants sitting out lets it act on its own local reading
+			// instead of the joint plan (see the SolarEdge/Anker fighting case).
+			s.Action = api.BatteryHold.String()
 		case discharge > suggestionThreshold && gridExporting:
 			// discharging while exporting means battery-to-grid discharge
 			s.Action = api.BatteryDischarge.String()
