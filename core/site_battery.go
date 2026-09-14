@@ -202,6 +202,14 @@ func (site *Site) firstBatteryMode(modes map[string]api.BatteryMode) (api.Batter
 // batterySuggestionModes returns the optimizer's suggested mode for each controllable battery
 // that currently has a pending suggestion, keyed by device name. A battery missing from the
 // result has no suggestion of its own and should fall back to the site-wide default.
+//
+// Each battery is solved as an independent asset, but they share one AC bus: a battery told to
+// force-charge doesn't know or care whether the power it draws comes from PV/grid or from
+// another battery that's simultaneously told to force-discharge. That combination isn't two
+// independent, beneficial actions - it's a wasteful round trip through both packs. Discharge
+// (feed-in arbitrage, a deliberate price-driven action) is kept; any battery whose suggestion
+// would force-charge while another is force-discharging is downgraded to normal instead, so it
+// follows its own self-consumption logic rather than soaking up the other battery's output.
 func (site *Site) batterySuggestionModes() (map[string]api.BatteryMode, bool) {
 	var modes map[string]api.BatteryMode
 
@@ -230,7 +238,32 @@ func (site *Site) batterySuggestionModes() (map[string]api.BatteryMode, bool) {
 		modes[name] = mode
 	}
 
+	site.suppressConflictingCharge(modes)
+
 	return modes, modes != nil
+}
+
+// suppressConflictingCharge downgrades any BatteryCharge entry in modes to BatteryNormal if
+// another battery in modes is set to BatteryDischarge. Charging one battery from another's
+// forced discharge only wastes a round trip; see batterySuggestionModes.
+func (site *Site) suppressConflictingCharge(modes map[string]api.BatteryMode) {
+	discharging := false
+	for _, m := range modes {
+		if m == api.BatteryDischarge {
+			discharging = true
+			break
+		}
+	}
+	if !discharging {
+		return
+	}
+
+	for name, m := range modes {
+		if m == api.BatteryCharge {
+			site.log.DEBUG.Printf("battery %s: suppressing charge suggestion, another battery is discharging to grid", name)
+			modes[name] = api.BatteryNormal
+		}
+	}
 }
 
 // batterySocLimitReached reports whether the battery has reached the soc bound
