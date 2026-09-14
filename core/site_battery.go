@@ -60,25 +60,34 @@ func (site *Site) fromTo(requested, m api.BatteryMode) bool {
 	return requested == m || requested == api.BatteryUnknown && site.batteryMode == m
 }
 
+// deviceFromTo is fromTo for a single battery, checked against that device's own last applied
+// mode instead of the site-wide one (which per-device optimizer suggestions can diverge from).
+func (site *Site) deviceFromTo(name string, requested, m api.BatteryMode) bool {
+	return requested == m || requested == api.BatteryUnknown && site.batteryModeApplied[name] == m
+}
+
 func (site *Site) updateBatteryMode(batteryGridChargeActive, batteryGridDischargeActive bool, rate api.Rate) {
-	batteryMode := site.requiredBatteryMode(batteryGridChargeActive, batteryGridDischargeActive, rate)
+	batteryMode, perDevice := site.requiredBatteryMode(batteryGridChargeActive, batteryGridDischargeActive, rate)
 
 	// put battery into hold mode when charging is active and HEMS dimmed
 	if dimmed := hems.Dimmed(site.hems); site.fromTo(batteryMode, api.BatteryCharge) && dimmed != nil && *dimmed {
 		site.log.DEBUG.Println("battery mode: HEMS dimmed")
 		batteryMode = api.BatteryHold
+		perDevice = nil
 	}
 
 	// stop discharging to grid when HEMS curtailed production, but keep self-consumption
 	if curtailed := hems.Curtailed(site.hems); site.fromTo(batteryMode, api.BatteryDischarge) && curtailed != nil && *curtailed {
 		site.log.DEBUG.Println("battery mode: HEMS curtailed")
 		batteryMode = api.BatteryNormal
+		perDevice = nil
 	}
 
-	// NOTE: applyBatteryMode is always called when charge or discharge mode is active to
-	// validate max soc / min soc reserve
-	if modeChanged := batteryMode != api.BatteryUnknown; modeChanged || site.batteryMode == api.BatteryCharge || site.batteryMode == api.BatteryDischarge {
-		if err := site.applyBatteryMode(batteryMode); err == nil {
+	// NOTE: applyBatteryMode is always called when charge or discharge mode is active, or
+	// per-device suggestions are pending, to validate max soc / min soc reserve
+	modeChanged := batteryMode != api.BatteryUnknown
+	if modeChanged || perDevice != nil || site.batteryMode == api.BatteryCharge || site.batteryMode == api.BatteryDischarge {
+		if err := site.applyBatteryMode(batteryMode, perDevice); err == nil {
 			if modeChanged {
 				site.SetBatteryMode(batteryMode)
 			}
@@ -88,9 +97,14 @@ func (site *Site) updateBatteryMode(batteryGridChargeActive, batteryGridDischarg
 	}
 }
 
-// requiredBatteryMode determines required battery mode based on grid charge/discharge and rate
-func (site *Site) requiredBatteryMode(batteryGridChargeActive, batteryGridDischargeActive bool, rate api.Rate) api.BatteryMode {
+// requiredBatteryMode determines required battery mode based on grid charge/discharge and rate.
+// The second return value, when non-nil, gives the optimizer's per-battery mode (keyed by device
+// name) for batteries whose suggestion diverges from the others; devices missing from that map
+// fall back to the first return value. It is only populated in the Automatic() case: every other
+// case is a site-wide signal (grid limits, HEMS) that legitimately applies to all batteries alike.
+func (site *Site) requiredBatteryMode(batteryGridChargeActive, batteryGridDischargeActive bool, rate api.Rate) (api.BatteryMode, map[string]api.BatteryMode) {
 	var res api.BatteryMode
+	var perDevice map[string]api.BatteryMode
 	batMode := site.GetBatteryMode()
 	extMode := site.GetBatteryModeExternal()
 
@@ -120,11 +134,17 @@ func (site *Site) requiredBatteryMode(batteryGridChargeActive, batteryGridDischa
 		// the suggestion ignores loads the optimizer cannot model as storage
 		res = keepUnlessModified(api.BatteryHold)
 	case site.Automatic():
-		// optimizer decides, replacing grid charge limit and discharge control
-		if mode, ok := site.batterySuggestionMode(); ok {
-			res = keepUnlessModified(mode)
+		// optimizer decides per battery, replacing grid charge limit and discharge control;
+		// each battery is solved independently, so their suggested actions can diverge.
+		// perDevice drives the actual per-battery writes; the site-wide indicator (res, and
+		// therefore GetBatteryMode/MQTT) mirrors the first battery for backward compatibility.
+		if modes, ok := site.batterySuggestionModes(); ok {
+			perDevice = modes
+			if mode, ok := site.firstBatteryMode(modes); ok {
+				res = keepUnlessModified(mode)
+			}
 		} else if batteryModeModified(batMode) {
-			// no suggestion: release the battery
+			// no suggestion for any battery: release them all
 			res = api.BatteryNormal
 		}
 	case batteryGridChargeActive:
@@ -144,7 +164,7 @@ func (site *Site) requiredBatteryMode(batteryGridChargeActive, batteryGridDischa
 		res = api.BatteryNormal
 	}
 
-	return res
+	return res, perDevice
 }
 
 // unmodelledCharging reports a loadpoint charging at full power that the optimizer
@@ -164,30 +184,53 @@ func (site *Site) unmodelledCharging() bool {
 	return false
 }
 
-// batterySuggestionMode returns the optimizer's mode for the first controllable battery.
-// TODO apply per battery once the site tracks more than a single battery mode
-func (site *Site) batterySuggestionMode() (api.BatteryMode, bool) {
+// firstBatteryMode returns the mode of the first battery meter (in configured order) present in
+// modes. Used to keep the site-wide indicator (site.batteryMode, GetBatteryMode, MQTT) backward
+// compatible with the pre-per-device behavior, which always reported the first battery's mode.
+func (site *Site) firstBatteryMode(modes map[string]api.BatteryMode) (api.BatteryMode, bool) {
+	for _, dev := range site.batteryMeters {
+		if dev == nil {
+			continue
+		}
+		if mode, ok := modes[dev.Config().Name]; ok {
+			return mode, true
+		}
+	}
+	return api.BatteryUnknown, false
+}
+
+// batterySuggestionModes returns the optimizer's suggested mode for each controllable battery
+// that currently has a pending suggestion, keyed by device name. A battery missing from the
+// result has no suggestion of its own and should fall back to the site-wide default.
+func (site *Site) batterySuggestionModes() (map[string]api.BatteryMode, bool) {
+	var modes map[string]api.BatteryMode
+
 	for _, dev := range site.batteryMeters {
 		if dev == nil {
 			continue
 		}
 
-		s := site.suggestion(batteryKey(dev.Config().Name), site.GetBatteryMode().String())
+		name := dev.Config().Name
+
+		s := site.suggestion(batteryKey(name), site.batteryModeApplied[name].String())
 		if s == nil {
 			continue
 		}
 
 		mode, err := api.BatteryModeString(s.Action)
 		if err != nil {
-			// unknown action, release the battery
+			// unknown action, release this battery
 			site.log.DEBUG.Printf("battery %s: cannot apply suggestion %s", deviceTitleOrName(dev), s.Action)
-			return api.BatteryNormal, true
+			mode = api.BatteryNormal
 		}
 
-		return mode, true
+		if modes == nil {
+			modes = make(map[string]api.BatteryMode, len(site.batteryMeters))
+		}
+		modes[name] = mode
 	}
 
-	return api.BatteryUnknown, false
+	return modes, modes != nil
 }
 
 // batterySocLimitReached reports whether the battery has reached the soc bound
@@ -230,16 +273,14 @@ func (site *Site) batterySocLimitReached(dev config.Device[api.Meter], discharge
 	return false, nil
 }
 
-// applyBatteryMode applies the mode to each battery.
+// applyBatteryMode applies mode to each battery, unless perDevice gives that battery's device
+// name a more specific mode (the optimizer's diverging per-battery suggestions; see
+// requiredBatteryMode). perDevice is nil outside the Automatic() case.
 //
-// A battery that reached the soc bound of the requested mode is held instead:
-// the max soc when charging, the min soc reserve when discharging to grid. This
-// is decided per device, so one battery reaching its bound does not force the
-// others into hold.
-func (site *Site) applyBatteryMode(mode api.BatteryMode) error {
-	fromToCharge := site.fromTo(mode, api.BatteryCharge)
-	fromToDischarge := site.fromTo(mode, api.BatteryDischarge)
-
+// A battery that reached the soc bound of its requested mode is held instead: the max soc when
+// charging, the min soc reserve when discharging to grid. This is decided per device, so one
+// battery reaching its bound does not force the others into hold.
+func (site *Site) applyBatteryMode(mode api.BatteryMode, perDevice map[string]api.BatteryMode) error {
 	if site.batteryModeApplied == nil {
 		site.batteryModeApplied = make(map[string]api.BatteryMode)
 	}
@@ -252,8 +293,24 @@ func (site *Site) applyBatteryMode(mode api.BatteryMode) error {
 			continue
 		}
 
-		// per-device mode so one battery reaching its soc bound does not affect the others
-		deviceMode := mode
+		name := dev.Config().Name
+
+		// per-device mode: an optimizer suggestion for this battery overrides the site-wide mode
+		deviceMode, diverged := mode, false
+		if m, ok := perDevice[name]; ok {
+			deviceMode, diverged = m, true
+		}
+
+		// a diverged device is judged against its own last applied mode (it may differ from
+		// the site-wide one); otherwise keep the original site-wide comparison unchanged
+		var fromToCharge, fromToDischarge bool
+		if diverged {
+			fromToCharge = site.deviceFromTo(name, deviceMode, api.BatteryCharge)
+			fromToDischarge = site.deviceFromTo(name, deviceMode, api.BatteryDischarge)
+		} else {
+			fromToCharge = site.fromTo(deviceMode, api.BatteryCharge)
+			fromToDischarge = site.fromTo(deviceMode, api.BatteryDischarge)
+		}
 
 		// hold at the soc bound of the requested mode (max soc for charge, min soc reserve for grid discharge)
 		if (fromToCharge || fromToDischarge) && deviceMode != api.BatteryHold {
@@ -267,7 +324,6 @@ func (site *Site) applyBatteryMode(mode api.BatteryMode) error {
 		}
 
 		// don't re-apply the mode the battery is already in
-		name := dev.Config().Name
 		if deviceMode == api.BatteryUnknown || deviceMode == site.batteryModeApplied[name] {
 			continue
 		}
