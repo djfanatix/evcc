@@ -71,6 +71,11 @@ type API interface {
 	// SetOptimizerChargingStrategy sets the optimizer grid charging strategy
 	SetOptimizerChargingStrategy(strategy string) error
 
+	// GetOptimizerPrimaryGoal gets the optimizer's primary goal
+	GetOptimizerPrimaryGoal() string
+	// SetOptimizerPrimaryGoal sets the optimizer's primary goal
+	SetOptimizerPrimaryGoal(goal string) error
+
 	//
 	// power and energy
 	//

@@ -481,6 +481,22 @@ func TestOptimizerChargingStrategy(t *testing.T) {
 	assert.Equal(t, "attenuate_grid_peaks", site.GetOptimizerChargingStrategy())
 }
 
+func TestOptimizerPrimaryGoal(t *testing.T) {
+	site := &Site{log: util.NewLogger("foo")}
+
+	// default when unset
+	assert.Equal(t, defaultOptimizerPrimaryGoal, site.GetOptimizerPrimaryGoal())
+	assert.Equal(t, "minimize_cost", site.GetOptimizerPrimaryGoal())
+
+	// invalid value rejected, goal unchanged
+	require.Error(t, site.SetOptimizerPrimaryGoal("bogus"))
+	assert.Equal(t, defaultOptimizerPrimaryGoal, site.GetOptimizerPrimaryGoal())
+
+	// valid change is applied (re-trigger is gated on sponsor/enabled, not unit-tested here)
+	require.NoError(t, site.SetOptimizerPrimaryGoal(string(optimizer.MaximizeSelfConsumption)))
+	assert.Equal(t, "maximize_self_consumption", site.GetOptimizerPrimaryGoal())
+}
+
 func TestGridExportLimit(t *testing.T) {
 	site := &Site{log: util.NewLogger("foo")}
 

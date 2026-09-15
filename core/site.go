@@ -100,6 +100,7 @@ type Site struct {
 
 	// optimizer settings
 	optimizerChargingStrategy string // optimizer grid charging strategy
+	optimizerPrimaryGoal      string // optimizer primary goal (cost vs self-consumption)
 
 	loadpoints  []*Loadpoint             // Loadpoints
 	tariffs     *tariff.Tariffs          // Tariffs
@@ -508,6 +509,13 @@ func (site *Site) restoreSettings() error {
 	}
 	site.publish(keys.OptimizerChargingStrategy, site.GetOptimizerChargingStrategy())
 	site.publish(keys.OptimizerChargingStrategies, optimizerChargingStrategies)
+	if v, err := settings.String(keys.OptimizerPrimaryGoal); err == nil && v != "" {
+		if err := site.SetOptimizerPrimaryGoal(v); err != nil {
+			site.log.WARN.Printf("optimizer primary goal: %v", err)
+		}
+	}
+	site.publish(keys.OptimizerPrimaryGoal, site.GetOptimizerPrimaryGoal())
+	site.publish(keys.OptimizerPrimaryGoals, optimizerPrimaryGoals)
 
 	// drop legacy accumulator-based forecast settings (now stored via metrics collector)
 	settings.Delete("solarAccForecast")

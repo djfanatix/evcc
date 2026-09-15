@@ -329,6 +329,10 @@ export interface State {
   optimizerChargingStrategy?: string;
   /** Available battery optimizer charging strategies. */
   optimizerChargingStrategies?: string[];
+  /** Selected battery optimizer primary goal. */
+  optimizerPrimaryGoal?: string;
+  /** Available battery optimizer primary goals. */
+  optimizerPrimaryGoals?: string[];
   /** Built-in MCP server is enabled. */
   mcp?: boolean;
   /** Instance runs in demo mode. */

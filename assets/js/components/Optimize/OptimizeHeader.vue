@@ -8,12 +8,27 @@
 					<div class="field-label small text-uppercase fw-bold evcc-gray">
 						Primary goal
 					</div>
-					<div class="field-caption small evcc-gray mt-1">always, fixed</div>
+					<div class="field-caption small evcc-gray mt-1">
+						{{ primaryGoals.length > 1 ? "changes what's optimal" : "always, fixed" }}
+					</div>
 				</div>
-				<div class="field-value gap-2">
-					<span class="value-text fw-bold text-lowercase evcc-default-text"
-						>Lowest cost</span
+				<div class="field-value gap-2" v-if="primaryGoals.length > 1">
+					<CustomSelect
+						id="optimizerPrimaryGoal"
+						:options="primaryGoalOptions"
+						:selected="selectedPrimaryGoal"
+						@change="onPrimaryGoalChange"
 					>
+						<span
+							class="value-text fw-bold text-lowercase evcc-default-text secondary-goal"
+							>{{ primaryGoalLabel }}</span
+						>
+					</CustomSelect>
+				</div>
+				<div class="field-value gap-2" v-else>
+					<span class="value-text fw-bold text-lowercase evcc-default-text">{{
+						primaryGoalLabel
+					}}</span>
 					<LockIcon class="value-icon" />
 				</div>
 			</div>
@@ -131,6 +146,13 @@ const STRATEGY_LABELS: Record<string, string> = {
 	none: "no preference",
 };
 
+// human labels for the optimizer's primary goals; like STRATEGY_LABELS, the available
+// values come from backend state
+const PRIMARY_GOAL_LABELS: Record<string, string> = {
+	minimize_cost: "lowest cost",
+	maximize_self_consumption: "max. self-consumption",
+};
+
 const STATUS_TOOLTIP =
 	"The optimizer result:<br><br>" +
 	"<strong>Optimal</strong>: the best plan was found.<br>" +
@@ -159,9 +181,11 @@ export default defineComponent({
 		currency: { type: String as PropType<CURRENCY>, default: CURRENCY.EUR },
 		chargingStrategies: { type: Array as PropType<string[]>, default: () => [] },
 		selectedStrategy: { type: String, default: "" },
+		primaryGoals: { type: Array as PropType<string[]>, default: () => [] },
+		selectedPrimaryGoal: { type: String, default: "minimize_cost" },
 		pending: { type: Boolean, default: false },
 	},
-	emits: ["optimize", "change-strategy"],
+	emits: ["optimize", "change-strategy", "change-primary-goal"],
 	data() {
 		return {
 			tooltips: [] as Tooltip[],
@@ -176,6 +200,15 @@ export default defineComponent({
 		},
 		secondaryGoalLabel(): string {
 			return STRATEGY_LABELS[this.selectedStrategy] || this.selectedStrategy;
+		},
+		primaryGoalOptions() {
+			return this.primaryGoals.map((value) => ({
+				value,
+				name: PRIMARY_GOAL_LABELS[value] || value,
+			}));
+		},
+		primaryGoalLabel(): string {
+			return PRIMARY_GOAL_LABELS[this.selectedPrimaryGoal] || this.selectedPrimaryGoal;
 		},
 		relativeTime(): string {
 			if (!this.updated) return "";
@@ -212,6 +245,9 @@ export default defineComponent({
 	methods: {
 		onStrategyChange(e: Event) {
 			this.$emit("change-strategy", (e.target as HTMLSelectElement).value);
+		},
+		onPrimaryGoalChange(e: Event) {
+			this.$emit("change-primary-goal", (e.target as HTMLSelectElement).value);
 		},
 		initTooltips() {
 			const items: [Element | undefined, string][] = [

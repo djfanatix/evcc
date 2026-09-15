@@ -10,9 +10,12 @@
 				:currency="currency"
 				:charging-strategies="chargingStrategies"
 				:selected-strategy="optimizerChargingStrategy"
+				:primary-goals="primaryGoals"
+				:selected-primary-goal="optimizerPrimaryGoal"
 				:pending="pending"
 				@optimize="optimizeNow"
 				@change-strategy="changeChargingStrategy"
+				@change-primary-goal="changePrimaryGoal"
 			/>
 		</Card>
 		<div class="row">
@@ -186,6 +189,12 @@ export default defineComponent({
 		optimizerChargingStrategy(): string {
 			return store.state.optimizerChargingStrategy || "";
 		},
+		primaryGoals(): string[] {
+			return store.state.optimizerPrimaryGoals || [];
+		},
+		optimizerPrimaryGoal(): string {
+			return store.state.optimizerPrimaryGoal || "minimize_cost";
+		},
 		netCost(): number {
 			return (this.evopt?.res?.objective_value || 0) * -1;
 		},
@@ -264,6 +273,9 @@ export default defineComponent({
 		},
 		changeChargingStrategy(value: string) {
 			api.post(`optimizerchargingstrategy/${value}`);
+		},
+		changePrimaryGoal(value: string) {
+			api.post(`optimizerprimarygoal/${value}`);
 		},
 	},
 });

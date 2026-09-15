@@ -49,6 +49,17 @@ var optimizerChargingStrategies = []string{
 
 const defaultOptimizerChargingStrategy = string(optimizer.OptimizerStrategyChargingStrategyChargeBeforeExport)
 
+// optimizerPrimaryGoals are the valid primary goals for the optimizer's cost stage; the first
+// entry is the default and preserves the previous hard-coded (money-only) behavior. Unlike the
+// charging/discharging strategies above, which only break ties between equally cheap schedules,
+// this changes what the cost stage itself optimizes for.
+var optimizerPrimaryGoals = []string{
+	string(optimizer.MinimizeCost),
+	string(optimizer.MaximizeSelfConsumption),
+}
+
+const defaultOptimizerPrimaryGoal = string(optimizer.MinimizeCost)
+
 // optimizerDecaySlots is the number of slots over which measured values decay into the forecast
 const optimizerDecaySlots = 4
 
@@ -487,6 +498,7 @@ func (site *Site) optimizerRequest(battery []types.Measurement) (optimizer.Optim
 		Strategy: optimizer.OptimizerStrategy{
 			ChargingStrategy:    optimizer.OptimizerStrategyChargingStrategy(site.GetOptimizerChargingStrategy()),
 			DischargingStrategy: optimizer.OptimizerStrategyDischargingStrategyDischargeBeforeImport,
+			PrimaryGoal:         optimizer.OptimizerStrategyPrimaryGoal(site.GetOptimizerPrimaryGoal()),
 		},
 		EtaC: eta,
 		EtaD: eta,

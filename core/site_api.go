@@ -637,6 +637,43 @@ func (site *Site) SetOptimizerChargingStrategy(strategy string) error {
 	return nil
 }
 
+// GetOptimizerPrimaryGoal returns the optimizer's primary goal (cost vs self-consumption),
+// falling back to the default when unset.
+func (site *Site) GetOptimizerPrimaryGoal() string {
+	site.RLock()
+	defer site.RUnlock()
+	if site.optimizerPrimaryGoal == "" {
+		return defaultOptimizerPrimaryGoal
+	}
+	return site.optimizerPrimaryGoal
+}
+
+// SetOptimizerPrimaryGoal validates and persists the optimizer's primary goal
+// and re-runs the optimizer when it changes.
+func (site *Site) SetOptimizerPrimaryGoal(goal string) error {
+	if !slices.Contains(optimizerPrimaryGoals, goal) {
+		return fmt.Errorf("invalid optimizer primary goal: %s", goal)
+	}
+
+	site.Lock()
+	changed := site.optimizerPrimaryGoal != goal
+	if changed {
+		site.optimizerPrimaryGoal = goal
+	}
+	site.Unlock()
+
+	if changed {
+		site.log.DEBUG.Println("set optimizer primary goal:", goal)
+		settings.SetString(keys.OptimizerPrimaryGoal, goal)
+		site.publish(keys.OptimizerPrimaryGoal, goal)
+
+		// re-run the optimizer so the new goal takes effect immediately
+		go site.optimizerUpdateAsync(0)
+	}
+
+	return nil
+}
+
 // GetBatteryMode returns the battery mode
 func (site *Site) GetBatteryMode() api.BatteryMode {
 	site.RLock()
