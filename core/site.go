@@ -386,7 +386,7 @@ func (site *Site) Boot(log *util.Logger, loadpoints []*Loadpoint, tariffs *tarif
 	// revert battery mode on shutdown
 	shutdown.Register(func() {
 		if mode := site.GetBatteryMode(); batteryModeModified(mode) {
-			if err := site.applyBatteryMode(api.BatteryNormal); err != nil {
+			if err := site.applyBatteryMode(api.BatteryNormal, nil); err != nil {
 				site.log.ERROR.Println("battery mode:", err)
 			}
 		}
@@ -910,11 +910,9 @@ func (site *Site) updateBatteryMeters() {
 
 // publishBattery applies the optimizer suggestions and publishes the battery state
 func (site *Site) publishBattery() {
-	mode := site.batteryAction()
-
 	battery := site.state().battery
 	for i, d := range battery.Devices {
-		battery.Devices[i].Suggestion = site.suggestion(batteryKey(d.Name), mode)
+		battery.Devices[i].Suggestion = site.suggestion(batteryKey(d.Name), site.batteryDeviceAction(d.Name))
 	}
 
 	site.publish(keys.Battery, battery)
