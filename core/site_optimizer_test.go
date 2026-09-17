@@ -633,7 +633,7 @@ func TestCurrentSlotSuggestion(t *testing.T) {
 		{"battery holdcharge (idle while exporting)", batteryTypeBattery, 0, 0, 0, 1000, "holdcharge"},
 		{"battery discharge (self-consumption while importing)", batteryTypeBattery, 0, 2000, 1000, 0, "normal"},
 		{"battery grid discharge (discharge while exporting)", batteryTypeBattery, 0, 2000, 0, 1000, "discharge"},
-		{"battery idle balanced", batteryTypeBattery, 0, 0, 0, 0, "normal"},
+		{"battery idle balanced", batteryTypeBattery, 0, 0, 0, 0, "hold"},
 		{"loadpoint charge", batteryTypeLoadpoint, 11000, 0, 0, 0, "charge"},
 		{"loadpoint stop", batteryTypeLoadpoint, 0, 0, 0, 0, "stop"},
 		{"vehicle below threshold is stop", batteryTypeVehicle, 40, 0, 0, 0, "stop"},
@@ -803,7 +803,7 @@ func TestReapplySuggestionAcrossSlotBoundary(t *testing.T) {
 	)
 
 	require.NotNil(t, site.suggestion(batteryKey("home"), api.BatteryNormal.String()))
-	assert.Equal(t, api.BatteryNormal.String(), site.suggestion(batteryKey("home"), api.BatteryNormal.String()).Action)
+	assert.Equal(t, api.BatteryHold.String(), site.suggestion(batteryKey("home"), api.BatteryNormal.String()).Action)
 	assert.Equal(t, actionStop, site.suggestion(loadpointKey(0), actionCharge).Action)
 
 	site.reapplySuggestions(reapplyMidGap)

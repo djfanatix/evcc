@@ -266,6 +266,98 @@ func TestBatteryModeAutomatic(t *testing.T) {
 	ctrl.Finish()
 }
 
+// TestBatteryModeAutomaticPerDevice guards that two batteries with diverging optimizer
+// suggestions (e.g. one discharging while the other holds) are each driven by their own
+// suggestion instead of both being forced into whichever battery happens to be first.
+func TestBatteryModeAutomaticPerDevice(t *testing.T) {
+	enableAutomatic(t)
+
+	ctrl := gomock.NewController(t)
+	solarEdgeCon := batteryControllerMock(ctrl)
+	ankerCon := batteryControllerMock(ctrl)
+
+	var solarEdge api.Meter = &struct {
+		api.Meter
+		api.BatteryController
+	}{
+		BatteryController: solarEdgeCon,
+	}
+	var anker api.Meter = &struct {
+		api.Meter
+		api.BatteryController
+	}{
+		BatteryController: ankerCon,
+	}
+
+	site := &Site{
+		log: util.NewLogger("foo"),
+		batteryMeters: []config.Device[api.Meter]{
+			config.NewStaticDevice(config.Named{Name: "solaredge"}, solarEdge),
+			config.NewStaticDevice(config.Named{Name: "anker"}, anker),
+		},
+	}
+
+	// the optimizer solved each battery independently: solaredge should discharge to
+	// the grid while anker (e.g. already low) should hold instead of fighting it
+	site.setSuggestions(map[string]types.Suggestion{
+		batteryKey("solaredge"): {Action: api.BatteryDischarge.String()},
+		batteryKey("anker"):     {Action: api.BatteryHold.String()},
+	})
+
+	solarEdgeCon.EXPECT().SetBatteryMode(api.BatteryDischarge)
+	ankerCon.EXPECT().SetBatteryMode(api.BatteryHold)
+	site.updateBatteryMode(false, false, api.Rate{})
+
+	// the site-wide indicator still mirrors the first battery for backward compatibility
+	assert.Equal(t, api.BatteryDischarge, site.GetBatteryMode())
+
+	ctrl.Finish()
+}
+
+// TestBatteryModeAutomaticSuppressesChargeAgainstDischarge guards that a battery suggested to
+// force-charge is downgraded to normal instead of soaking up another battery's forced discharge
+// onto the shared AC bus - the two together would just waste a round trip through both packs.
+func TestBatteryModeAutomaticSuppressesChargeAgainstDischarge(t *testing.T) {
+	enableAutomatic(t)
+
+	ctrl := gomock.NewController(t)
+	solarEdgeCon := batteryControllerMock(ctrl)
+	ankerCon := batteryControllerMock(ctrl)
+
+	var solarEdge api.Meter = &struct {
+		api.Meter
+		api.BatteryController
+	}{
+		BatteryController: solarEdgeCon,
+	}
+	var anker api.Meter = &struct {
+		api.Meter
+		api.BatteryController
+	}{
+		BatteryController: ankerCon,
+	}
+
+	site := &Site{
+		log: util.NewLogger("foo"),
+		batteryMeters: []config.Device[api.Meter]{
+			config.NewStaticDevice(config.Named{Name: "solaredge"}, solarEdge),
+			config.NewStaticDevice(config.Named{Name: "anker"}, anker),
+		},
+	}
+
+	// solaredge would force-charge while anker force-discharges to grid: charge is suppressed
+	site.setSuggestions(map[string]types.Suggestion{
+		batteryKey("solaredge"): {Action: api.BatteryCharge.String()},
+		batteryKey("anker"):     {Action: api.BatteryDischarge.String()},
+	})
+
+	solarEdgeCon.EXPECT().SetBatteryMode(api.BatteryNormal)
+	ankerCon.EXPECT().SetBatteryMode(api.BatteryDischarge)
+	site.updateBatteryMode(false, false, api.Rate{})
+
+	ctrl.Finish()
+}
+
 func TestBatteryGridChargeLimitUnavailable(t *testing.T) {
 	enableAutomatic(t)
 

@@ -111,15 +111,29 @@ func (d batteryDetail) key() string {
 // comparison. Must only be called for devices with a non-empty key.
 func (d batteryDetail) currentAction(site *Site) string {
 	if d.Type == batteryTypeBattery {
-		return site.batteryAction()
+		return site.batteryDeviceAction(d.Name)
 	}
 	return loadpointCurrentAction(site.loadpoints[*d.loadpoint])
 }
 
-// batteryAction returns the battery's current mode for suggestion comparison.
+// batteryAction returns the site-wide battery mode for suggestion comparison.
 // A battery that was never switched (BatteryUnknown) is in normal operation.
 func (site *Site) batteryAction() string {
 	if mode := site.GetBatteryMode(); mode != api.BatteryUnknown {
+		return mode.String()
+	}
+	return api.BatteryNormal.String()
+}
+
+// batteryDeviceAction returns a single battery's own current mode for suggestion comparison.
+// The site-wide indicator (batteryAction/GetBatteryMode) only mirrors whichever battery
+// currently has a pending suggestion and happens to be first in config order (see
+// firstBatteryMode) - comparing every battery's suggestion against that single value instead
+// of its own last applied mode makes the actionable flag flip between batteries independently
+// of anything the optimizer actually changed. A battery never switched (BatteryUnknown) is in
+// normal operation.
+func (site *Site) batteryDeviceAction(name string) string {
+	if mode := site.batteryModeApplied[name]; mode != api.BatteryUnknown {
 		return mode.String()
 	}
 	return api.BatteryNormal.String()
@@ -201,6 +215,14 @@ func currentSlotSuggestion(detail batteryDetail, res optimizer.BatteryResult, sl
 		case idle && gridExporting:
 			// idle while exporting: surplus is exported instead of charged
 			s.Action = api.BatteryHoldCharge.String()
+		case idle:
+			// idle with no net grid flow: the site is self-balanced (e.g. another
+			// battery is covering the surplus/load), so there's no import/export signal
+			// to read intent from. Hold rather than release to self-consumption - with a
+			// single battery that's a no-op, but with several, self-consumption on a
+			// battery the plan wants sitting out lets it act on its own local reading
+			// instead of the joint plan (see the SolarEdge/Anker fighting case).
+			s.Action = api.BatteryHold.String()
 		case discharge > suggestionThreshold && gridExporting:
 			// discharging while exporting means battery-to-grid discharge
 			s.Action = api.BatteryDischarge.String()
