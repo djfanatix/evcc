@@ -34,7 +34,7 @@ require (
 	github.com/enbility/ship-go v0.6.1-0.20260720110450-0aa90f64ac76
 	github.com/enbility/spine-go v0.7.1-0.20260629113257-b3bcc643f323
 	github.com/evcc-io/openapi-mcp v0.6.1-0.20260701153510-26c442199ef4
-	github.com/evcc-io/optimizer v0.0.0-20260816074151-cab3d297ea7c
+	github.com/evcc-io/optimizer v0.0.0-20260917161916-237a4fbff815
 	github.com/evcc-io/rct v0.2.0
 	github.com/evcc-io/tesla-proxy-client v0.0.0-20260722080120-05ada06c7368
 	github.com/fatih/structs v1.1.0
@@ -281,4 +281,4 @@ replace github.com/enbility/eebus-go => github.com/andig/eebus-go v0.0.0-2026083
 
 replace github.com/enbility/ship-go => github.com/andig/ship-go v0.6.1-0.20260901124541-3de7acda5f88
 
-replace github.com/evcc-io/optimizer => github.com/djfanatix/optimizer v0.0.0-20260915142524-28deace06a40
+replace github.com/evcc-io/optimizer => github.com/djfanatix/optimizer v0.0.0-20260917174507-f219d305aba5
