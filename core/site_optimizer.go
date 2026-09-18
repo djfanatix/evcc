@@ -1053,6 +1053,13 @@ func (site *Site) batteryRequest(dev config.Device[api.Meter], b types.Measureme
 		bat.SMax = max(bat.SInitial, float32(*b.Capacity*maxSoc*10)) // Wh
 	}
 
+	if m, ok := api.Cap[api.BatteryEfficiency](instance); ok {
+		if e := m.Efficiency(); e > 0 {
+			bat.EtaC = float32(e) / 100
+			bat.EtaD = bat.EtaC
+		}
+	}
+
 	detail := batteryDetail{
 		Type:         batteryTypeBattery,
 		Name:         dev.Config().Name,

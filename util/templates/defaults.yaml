@@ -427,6 +427,18 @@ params:
       en: Maximum discharge power of the storage.
       de: Maximale Entladeleistung des Speichers.
     advanced: true
+  - name: efficiency
+    unit: "%"
+    type: int
+    usages: ["battery"]
+    description:
+      de: Wirkungsgrad
+      en: Efficiency
+    help:
+      de: Lade- und Entladewirkungsgrad der Batterie für die Optimierung
+      en: Charge and discharge efficiency of the battery used for optimization
+    default: 90
+    advanced: true
 
   - name: accesstoken
     mask: true
@@ -849,6 +861,7 @@ presets:
     - name: maxsoc
     - name: maxchargepower
     - name: maxdischargepower
+    - name: efficiency
 
   battery-capacity:
     - name: capacity
