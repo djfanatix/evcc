@@ -460,9 +460,9 @@ func (site *Site) optimizerRequest(battery []types.Measurement) (optimizer.Optim
 		minLen = min(minLen, len(solar))
 	}
 
-	if optimizerURI() == OPTIMIZER_URI {
-		minLen = slotsUntil(grid, optimizerHorizon(time.Now()), minLen)
-	}
+	// upstream leaves self-hosted optimizers (OPTIMIZER_URI) uncapped, assuming they have the
+	// compute to match; ours doesn't, so the cap applies regardless of endpoint here.
+	minLen = slotsUntil(grid, optimizerHorizon(time.Now()), minLen)
 
 	if expectedSlots := 8; minLen < expectedSlots {
 		if solarTariff != nil {
