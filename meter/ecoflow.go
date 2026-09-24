@@ -37,6 +37,7 @@ func init() {
 func NewEcoFlowFromConfig(other map[string]any) (api.Meter, error) {
 	cc := struct {
 		batteryCapacity                      `mapstructure:",squash"`
+		batteryEfficiency                    `mapstructure:",squash"`
 		batteryPowerLimits                   `mapstructure:",squash"`
 		batterySocLimits                     `mapstructure:",squash"`
 		Usage                                string
@@ -75,12 +76,12 @@ func NewEcoFlowFromConfig(other map[string]any) (api.Meter, error) {
 		return nil, fmt.Errorf("invalid region: %s", cc.Region)
 	}
 
-	return NewEcoFlow(cc.AccessKey, cc.SecretKey, cc.Serial, cc.Usage, uri, cc.Power, cc.Soc, cc.Cache, cc.batteryCapacity.Decorator(), cc.batterySocLimits, cc.batteryPowerLimits.Decorator())
+	return NewEcoFlow(cc.AccessKey, cc.SecretKey, cc.Serial, cc.Usage, uri, cc.Power, cc.Soc, cc.Cache, cc.batteryCapacity.Decorator(), cc.batteryEfficiency.Decorator(), cc.batterySocLimits, cc.batteryPowerLimits.Decorator())
 }
 
 // NewEcoFlow constructs the EcoFlow struct
 func NewEcoFlow(accessKey, secretKey, serial, usage, uri string,
-	power, soc string, cache time.Duration, capacity func() float64, batterySocLimits batterySocLimits, batteryPowerLimits func() (float64, float64)) (*EcoFlow, error) {
+	power, soc string, cache time.Duration, capacity func() float64, efficiency func() int64, batterySocLimits batterySocLimits, batteryPowerLimits func() (float64, float64)) (*EcoFlow, error) {
 	log := util.NewLogger("ecoflow").Redact(accessKey, secretKey, serial)
 
 	m := &EcoFlow{
@@ -104,6 +105,7 @@ func NewEcoFlow(accessKey, secretKey, serial, usage, uri string,
 		implement.May(m, implement.BatteryCapacity(capacity))
 		implement.May(m, implement.BatterySocLimiter(batterySocLimits.Decorator()))
 		implement.May(m, implement.BatteryPowerLimiter(batteryPowerLimits))
+		implement.May(m, implement.BatteryEfficiency(efficiency))
 
 		// the backup reserve command is Stream-specific, the PowerOcean template shares this meter type
 		if soc == "cmsBattSoc" {
