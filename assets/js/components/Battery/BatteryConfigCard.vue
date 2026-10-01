@@ -71,21 +71,54 @@
 			</div>
 		</div>
 
+		<p
+			v-if="optimizerControlledTitles.length"
+			class="d-flex gap-3 text-muted small mb-0"
+			data-testid="battery-optimizer-hint"
+		>
+			<OptimizerAuto class="flex-shrink-0" />
+			<i18n-t keypath="battery.config.optimizerControlledHint" tag="span" scope="global">
+				<template #loadpoints>{{ controlledTitleList }}</template>
+				<template #optimizer>
+					<router-link to="/optimize" class="text-muted">
+						{{ $t("config.optimizer.linkWord") }}
+					</router-link>
+				</template>
+			</i18n-t>
+		</p>
+
 		<template v-if="controllable">
 			<hr class="my-3" />
-			<div class="form-check form-switch">
+			<div
+				class="form-check form-switch"
+				:class="{ 'opacity-25 pe-none': optimizerAutomatic }"
+			>
 				<input
 					id="batteryDischarge"
-					:checked="batteryDischargeControl"
+					:checked="batteryDischargeControl && !optimizerAutomatic"
 					class="form-check-input"
 					type="checkbox"
 					role="switch"
+					:disabled="optimizerAutomatic"
 					@change="changeDischargeControl"
 				/>
 				<label class="form-check-label" for="batteryDischarge">
 					{{ $t("battery.config.discharge") }}
 				</label>
 			</div>
+			<p
+				v-if="optimizerAutomatic"
+				class="switch-indent d-flex gap-3 text-muted small mt-2 mb-3"
+			>
+				<OptimizerAuto class="flex-shrink-0" />
+				<i18n-t keypath="config.optimizer.controlled" tag="span" scope="global">
+					<template #optimizer>
+						<router-link to="/optimize" class="text-muted">
+							{{ $t("config.optimizer.linkWord") }}
+						</router-link>
+					</template>
+				</i18n-t>
+			</p>
 			<div v-if="experimental" class="form-check form-switch mt-2">
 				<input
 					id="batteryGridDischarge"
@@ -142,11 +175,12 @@ import type { Battery } from "@/types/evcc";
 import Card from "../Helper/Card.vue";
 import ConfirmModal from "../Helper/ConfirmModal.vue";
 import InlineSocSelect from "./InlineSocSelect.vue";
+import OptimizerAuto from "../MaterialIcon/OptimizerAuto.vue";
 
 // Battery usage controls: surplus priority, charging buffer and discharge switches.
 export default defineComponent({
 	name: "BatteryConfigCard",
-	components: { Card, ConfirmModal, InlineSocSelect },
+	components: { Card, ConfirmModal, InlineSocSelect, OptimizerAuto },
 	mixins: [formatter],
 	props: {
 		bufferSoc: { type: Number, default: 100 },
@@ -157,6 +191,8 @@ export default defineComponent({
 		battery: { type: Object as PropType<Battery> },
 		experimental: Boolean,
 		country: String,
+		optimizerAutomatic: Boolean,
+		optimizerControlledTitles: { type: Array as PropType<string[]>, default: () => [] },
 	},
 	data() {
 		return {
@@ -173,6 +209,9 @@ export default defineComponent({
 			return this.$refs["gridDischargeConfirm"] as
 				| InstanceType<typeof ConfirmModal>
 				| undefined;
+		},
+		controlledTitleList(): string {
+			return new Intl.ListFormat(this.$i18n?.locale).format(this.optimizerControlledTitles);
 		},
 		chargeSubtitle(): string {
 			return `${this.$t("battery.card.soc")} ${this.fmtSoc(this.batterySoc)}`;
@@ -334,3 +373,10 @@ export default defineComponent({
 	},
 });
 </script>
+
+<style scoped>
+/* matches .form-switch padding so the note aligns with the label text */
+.switch-indent {
+	padding-left: 2.5rem;
+}
+</style>
