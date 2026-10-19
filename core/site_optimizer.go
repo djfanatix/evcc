@@ -1153,6 +1153,13 @@ func (site *Site) batteryRequest(dev config.Device[api.Meter], b types.Measureme
 		}
 	}
 
+	if m, ok := api.Cap[api.BatteryEfficiency](instance); ok {
+		if e := m.Efficiency(); e > 0 {
+			bat.EtaC = float32(e) / 100
+			bat.EtaD = bat.EtaC
+		}
+	}
+
 	// soc limits measured by updateBatteryMeters; a failed read keeps the defaults
 	if b.MinSoc != nil && b.MaxSoc != nil {
 		minSoc, maxSoc := *b.MinSoc, *b.MaxSoc
