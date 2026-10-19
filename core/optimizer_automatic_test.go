@@ -627,8 +627,8 @@ func TestBatteryModesPerDevice(t *testing.T) {
 	enableAutomatic(t)
 	ctrl := gomock.NewController(t)
 
-	active, activeCon := batteryControlMock(ctrl, 50, 100)
-	idle, idleCon := batteryControlMock(ctrl, 50, 100)
+	active, activeCon := batteryControlMock(ctrl)
+	idle, idleCon := batteryControlMock(ctrl)
 
 	site := &Site{
 		log: util.NewLogger("foo"),
@@ -658,7 +658,7 @@ func TestBatteryModesReleasedWithoutSuggestion(t *testing.T) {
 	enableAutomatic(t)
 	ctrl := gomock.NewController(t)
 
-	idle, idleCon := batteryControlMock(ctrl, 50, 100)
+	idle, idleCon := batteryControlMock(ctrl)
 
 	site := &Site{
 		log:                util.NewLogger("foo"),
@@ -680,8 +680,8 @@ func TestBatteryModesHemsCurtailed(t *testing.T) {
 	enableAutomatic(t)
 	ctrl := gomock.NewController(t)
 
-	active, activeCon := batteryControlMock(ctrl, 50, 100)
-	idle, idleCon := batteryControlMock(ctrl, 50, 100)
+	active, activeCon := batteryControlMock(ctrl)
+	idle, idleCon := batteryControlMock(ctrl)
 
 	curtailed := 60
 	h := api.NewMockHEMS(ctrl)
